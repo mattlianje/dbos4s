@@ -80,12 +80,8 @@ final class TestDbos(val appName: String = "test") extends Dbos {
 
   def onStep(name: String): TestDbos.StepStub = new TestDbos.StepStub(this, name)
 
-  private[testing] def stubStepReturns(name: String, value: Any): this.type = {
-    stepStubs(name) = () => value
-    this
-  }
-  private[testing] def stubStepThrows(name: String, t: Throwable): this.type = {
-    stepStubs(name) = () => throw t
+  private[testing] def stubStep(name: String, thunk: () => Any): this.type = {
+    stepStubs(name) = thunk
     this
   }
 
@@ -139,7 +135,7 @@ final class TestDbos(val appName: String = "test") extends Dbos {
   }
 
   def setEvent(key: String, value: Any): Unit =
-    eventLog += ((DbosContext.current.fold("")(_.workflowId), key, value))
+    eventLog += ((currentWorkflowId, key, value))
 
   def event[A](targetId: String, key: String, timeout: FiniteDuration): Option[A] =
     eventSeeds
@@ -168,10 +164,10 @@ final class TestDbos(val appName: String = "test") extends Dbos {
     logged ++ seeded
   }
 
-  def writeStream(key: String, value: Any): Unit = {
-    val id = DbosContext.current.fold("")(_.workflowId)
-    streamLog.getOrElseUpdate((id, key), mutable.ListBuffer.empty) += value
-  }
+  def writeStream(key: String, value: Any): Unit =
+    streamLog.getOrElseUpdate((currentWorkflowId, key), mutable.ListBuffer.empty) += value
+
+  private def currentWorkflowId: String = DbosContext.current.fold("")(_.workflowId)
 
   def closeStream(key: String): Unit = ()
 
@@ -188,9 +184,9 @@ object TestDbos {
 
   final class StepStub private[testing] (dbos: TestDbos, name: String) {
 
-    def returns(value: Any): TestDbos = dbos.stubStepReturns(name, value)
+    def returns(value: Any): TestDbos = dbos.stubStep(name, () => value)
 
-    def throws(t: Throwable): TestDbos = dbos.stubStepThrows(name, t)
+    def throws(t: Throwable): TestDbos = dbos.stubStep(name, () => throw t)
   }
 }
 

@@ -4,7 +4,7 @@ import _root_.etl4s._
 import dev.dbos.transact.workflow.StepOptions
 
 /**
- * etl4s x DBOS bridge exntension methods
+ * etl4s x DBOS bridge extension methods
  *
  * {{{
  * import etl4s._
@@ -25,8 +25,9 @@ import dev.dbos.transact.workflow.StepOptions
  */
 package object etl4s {
 
-  /** Preserve the original node's lineage on the lifted node.
-   *  TODO: Maybe a little useless ... revisit 
+  /** Preserve the original node's lineage on the lifted node, so etl4s
+   *  introspection (e.g. `getLineage`) still names the user's stage rather than
+   *  the synthetic step wrapper.
    */
   private[etl4s] def relineage[A, B](orig: Node[A, B], lifted: Node[A, B]): Node[A, B] =
     orig.getLineage.fold(lifted)(lifted.withLineage)
@@ -39,9 +40,6 @@ package object etl4s {
 
     def step(opts: StepOptions)(implicit dbos: Dbos): Node[A, B] =
       relineage(node, Node((a: A) => dbos.step(opts)(node(a))))
-
-    def retryStep(name: String, maxAttempts: Int)(implicit dbos: Dbos): Node[A, B] =
-      step(new StepOptions(name).withMaxAttempts(maxAttempts))
   }
 
   /** Register a fully-lifted pipeline as a durable DBOS workflow. */
@@ -60,9 +58,6 @@ package object etl4s {
 
     def step(opts: StepOptions)(implicit dbos: Dbos): Reader[R, Node[A, B]] =
       reader.map(_.step(opts))
-
-    def retryStep(name: String, maxAttempts: Int)(implicit dbos: Dbos): Reader[R, Node[A, B]] =
-      reader.map(_.retryStep(name, maxAttempts))
   }
 
   /** Provide context and register a lifted context-dependent pipeline. */
