@@ -1,0 +1,148 @@
+package build
+import mill._, scalalib._, publish._
+
+val scalas = Map(
+  "2.12" -> "2.12.20",
+  "2.13" -> "2.13.16",
+  "3"    -> "3.7.0"
+)
+
+val transact = Map(
+  "0.9" -> "0.9.0"
+)
+val transactLatest = "0.9"
+
+val etl4sVersions = Seq("1.9.1")
+val etl4sLatest   = "1.9.1"
+
+def macroAnnotationOptions(scalaKey: String): Seq[String] =
+  scalaKey match {
+    case "2.13" => Seq("-Ymacro-annotations")
+    case "3"    => Seq("-experimental")
+    case _      => Seq.empty
+  }
+
+def macroAnnotationPlugins(scalaKey: String): Seq[Dep] =
+  if (scalaKey == "2.12") Seq(mvn"org.scalamacros:::paradise:2.1.1") else Seq.empty
+
+val matrix: Seq[(String, String)] =
+  for { s <- scalas.keys.toSeq; t <- transact.keys.toSeq } yield (s, t)
+
+val etl4sMatrix: Seq[(String, String, String)] =
+  for { (s, t) <- matrix; e <- etl4sVersions } yield (s, t, e)
+
+trait BaseModule extends ScalaModule {
+  def jvmId = "temurin:17"
+}
+
+trait Published extends BaseModule with SonatypeCentralPublishModule {
+  def publishVersion = "0.1.0"
+  def pomDescription: String
+
+  def pomSettings = PomSettings(
+    description = pomDescription,
+    organization = "xyz.matthieucourt",
+    url = "https://github.com/mattlianje/dbos4s",
+    licenses = Seq(License.`Apache-2.0`),
+    versionControl = VersionControl.github("mattlianje", "dbos4s"),
+    developers = Seq(
+      Developer("mattlianje", "Matthieu Court", "https://github.com/mattlianje")
+    )
+  )
+}
+
+trait TransactModule extends Published {
+  def scalaKey: String
+  def transactMinor: String
+  def scalaVersion    = scalas(scalaKey)
+  def transactVersion = transact(transactMinor)
+
+  def scalaEpoch = if (scalaKey.startsWith("2")) "2" else "3"
+
+  def extraSourceDirs: Seq[os.SubPath] = Nil
+
+  def sources = Task.Sources(
+    (Seq(
+      os.sub / "src",
+      os.sub / s"src-$scalaEpoch",
+      os.sub / s"src-transact-$transactMinor"
+    ) ++ extraSourceDirs).map(moduleDir / _)*
+  )
+
+  trait CrossTests extends ScalaTests with TestModule.Munit {
+    def mvnDeps = Seq(mvn"org.scalameta::munit:1.1.1")
+    def sources = Task.Sources(
+      moduleDir / "src",
+      moduleDir / s"src-$scalaEpoch"
+    )
+  }
+}
+
+trait TransactCross extends Cross.Module2[String, String] with TransactModule {
+  def scalaKey      = crossValue
+  def transactMinor = crossValue2
+}
+
+object dbos4s     extends Cross[Dbos4sCross](matrix)
+trait Dbos4sCross extends TransactCross {
+  def artifactName   = s"dbos4s-transact$transactMinor"
+  def pomDescription = "Beautiful, buttery Scala bindings for DBOS"
+  def mvnDeps        = Seq(
+    mvn"dev.dbos:transact:$transactVersion",
+    mvn"org.slf4j:slf4j-api:2.0.18"
+  )
+  object test extends CrossTests
+}
+
+object `dbos4s-testkit` extends Cross[TestkitCross](matrix)
+trait TestkitCross      extends TransactCross {
+  def artifactName   = s"dbos4s-testkit-transact$transactMinor"
+  def pomDescription = "In-memory test double for dbos4s"
+  def moduleDeps     = Seq(dbos4s(scalaKey, transactMinor))
+  object test extends CrossTests
+}
+
+object `dbos4s-etl4s` extends Cross[Etl4sCross](etl4sMatrix)
+trait Etl4sCross      extends Cross.Module3[String, String, String] with TransactModule {
+  def scalaKey      = crossValue
+  def transactMinor = crossValue2
+  def etl4sVersion  = crossValue3
+
+  def artifactName   = s"dbos4s-etl4s$etl4sVersion-transact$transactMinor"
+  def pomDescription = "Make etl4s pipelines DBOS-durable"
+  def moduleDeps     = Seq(dbos4s(scalaKey, transactMinor))
+
+  override def extraSourceDirs = Seq(os.sub / s"src-etl4s-$etl4sVersion")
+
+  def mvnDeps = Seq(mvn"xyz.matthieucourt::etl4s:$etl4sVersion") ++
+    (if (scalaEpoch == "2") Seq(mvn"org.scala-lang:scala-reflect:$scalaVersion") else Seq.empty)
+  def scalacOptions       = super.scalacOptions() ++ macroAnnotationOptions(scalaKey)
+  def scalacPluginMvnDeps = super.scalacPluginMvnDeps() ++ macroAnnotationPlugins(scalaKey)
+
+  object test extends CrossTests {
+    def moduleDeps          = super.moduleDeps ++ Seq(`dbos4s-testkit`(scalaKey, transactMinor))
+    def scalacOptions       = super.scalacOptions() ++ macroAnnotationOptions(scalaKey)
+    def scalacPluginMvnDeps = super.scalacPluginMvnDeps() ++ macroAnnotationPlugins(scalaKey)
+  }
+}
+
+object examples extends BaseModule {
+  def scalaVersion = scalas("3")
+  def moduleDeps   =
+    Seq(dbos4s("3", transactLatest), `dbos4s-etl4s`("3", transactLatest, etl4sLatest))
+  def mvnDeps = Seq(
+    mvn"com.lihaoyi::cask:0.11.3",
+    mvn"org.slf4j:slf4j-simple:2.0.18",
+    mvn"xyz.matthieucourt::etl4s:$etl4sLatest"
+  )
+  def scalacOptions = Seq("-experimental")
+  def resources     = Task.Sources("resources")
+}
+
+object repl extends BaseModule {
+  def scalaVersion = scalas("3")
+  def moduleDeps   =
+    Seq(dbos4s("3", transactLatest), `dbos4s-etl4s`("3", transactLatest, etl4sLatest))
+  def mvnDeps       = Seq(mvn"xyz.matthieucourt::etl4s:$etl4sLatest")
+  def scalacOptions = Seq("-experimental")
+}
