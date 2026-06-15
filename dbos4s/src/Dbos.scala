@@ -220,9 +220,7 @@ final class LiveDbos private[dbos4s] (val underlying: DBOS) extends Dbos {
   def result[R](id: String): R =
     underlying.getResult[R, Exception](id)
 
-  def step[T](opts: StepOptions)(body: => T): T = runStep(opts)(body)
-
-  private def runStep[T](opts: StepOptions)(body: => T): T = {
+  def step[T](opts: StepOptions)(body: => T): T = {
     val supplier: ThrowingSupplier[AnyRef, Exception] = () => box(body)
     underlying.runStep(supplier, opts).asInstanceOf[T]
   }
@@ -247,7 +245,7 @@ final class LiveDbos private[dbos4s] (val underlying: DBOS) extends Dbos {
     underlying.sendBulk(Jdk.toJava(messages))
 
   def events(targetId: String): Map[String, Any] =
-    Jdk.toScala(underlying.getAllEvents(targetId)).asInstanceOf[Map[String, Any]]
+    Jdk.toScala(underlying.getAllEvents(targetId))
 
   def writeStream(key: String, value: Any): Unit =
     underlying.writeStream(key, value.asInstanceOf[AnyRef])
