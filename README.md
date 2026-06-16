@@ -13,7 +13,7 @@ A thin layer over the official [dev.dbos:transact](https://mvnrepository.com/art
 functions into durable workflows 🧈✨
 
 ## Installation
-**dbos4s** is on the MavenCentral repository and cross publish for Scala 2.12, 2.13 and 3
+**dbos4s** is on the MavenCentral repository and cross publish for Scala 2.12, 2.13 and 3. **dbos4s** brings the pinned Java DBOS onto your classpath, and changes nothing about the transactor.
 
 ```scala
 "xyz.matthieucourt" %% "dbos4s-transact0.9"         % "0.1.0"
@@ -25,8 +25,7 @@ All you need:
 import dbos4s._
 ```
 
-## Of note...
-**dbos4s** brings the pinned Java DBOS onto your classpath, and changes nothing about the transactor. 
+## Of note... 
 At its core, it simply is a spread of niceties on top of DBOS Java to make it idiomatic Scala, and remove some of the interop jankiness.
 
 > [!WARNING]
