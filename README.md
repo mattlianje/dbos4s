@@ -118,7 +118,7 @@ dbos.workflow("checkout") {
 ```
 
 ### Sleep that survives reboots
-No scheduler, no wakeup table. The deadline is checkpointed, so any process resumes it:
+The deadline is checkpointed, so any process resumes it:
 ```scala
 import scala.concurrent.duration._
 
@@ -144,7 +144,7 @@ dbos.send("refund-99", true, "approval")
 ```
 
 ### Retries with backoff
-Transient failures retry automatically, declared not coded:
+Transient failures retry automatically
 ```scala
 dbos.step("fetch", maxAttempts = 5) { callFlakyApi() }
 
